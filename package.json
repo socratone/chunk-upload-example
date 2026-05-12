@@ -1,0 +1,12 @@
+{
+  "name": "chunk-upload-example",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w packages/api\" \"npm run dev -w packages/web\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
