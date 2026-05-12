@@ -41,6 +41,9 @@ export default function App() {
       if (!initRes.ok) throw new Error('Failed to init upload');
       const { uploadId } = await initRes.json();
 
+      // 고정된 개수의 워커 풀을 실행한다. 각 워커는 nextChunk를 공유하면서
+      // 다음 청크 번호를 하나씩 가져가므로, 모든 청크가 처리될 때까지
+      // 최대 CONCURRENCY개 청크만 동시에 업로드된다.
       let nextChunk = 0;
 
       async function uploadWorker() {
