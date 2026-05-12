@@ -7,6 +7,7 @@
 - 파일을 1,000KB 단위 청크로 분할
 - 최대 5개 청크 동시 업로드
 - 업로드 세션과 청크 상태를 SQLite에 저장
+- 중단된 업로드를 같은 파일 정보 기준으로 이어서 업로드
 - 모든 청크 업로드 완료 후 서버에서 원본 파일로 병합
 - Vite 개발 서버에서 `/api` 요청을 API 서버로 프록시
 
@@ -95,8 +96,8 @@ npm run build -w packages/api
 
 1. 사용자가 웹 화면에서 파일을 선택합니다.
 2. 클라이언트가 파일 크기를 기준으로 전체 청크 수를 계산합니다.
-3. `POST /api/upload/init` 요청으로 업로드 세션을 생성합니다.
-4. 클라이언트가 파일을 청크로 잘라 `POST /api/upload/chunk`로 전송합니다.
+3. `POST /api/upload/init` 요청으로 업로드 세션을 생성하거나 기존 세션을 재사용합니다.
+4. 기존 세션이 있으면 이미 업로드된 청크를 제외하고, 남은 청크만 `POST /api/upload/chunk`로 전송합니다.
 5. 서버가 각 청크 파일을 `packages/api/tmp/{uploadId}`에 저장하고 DB에 업로드 상태를 기록합니다.
 6. 모든 청크 전송이 끝나면 `POST /api/upload/complete` 요청을 보냅니다.
 7. 서버가 청크를 순서대로 읽어 `packages/api/uploads`에 최종 파일을 생성합니다.
@@ -106,7 +107,7 @@ npm run build -w packages/api
 
 ### `POST /api/upload/init`
 
-업로드 세션을 생성합니다.
+업로드 세션을 생성합니다. 같은 `filename`, `filesize`, `totalChunks`를 가진 미완료 세션이 있으면 기존 세션을 재사용하고 이미 업로드된 청크 번호를 함께 반환합니다.
 
 요청 본문:
 
@@ -122,7 +123,9 @@ npm run build -w packages/api
 
 ```json
 {
-  "uploadId": "uuid"
+  "uploadId": "uuid",
+  "uploadedChunks": [0, 1, 2],
+  "resumed": true
 }
 ```
 

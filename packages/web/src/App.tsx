@@ -39,7 +39,19 @@ export default function App() {
         body: JSON.stringify({ filename: file.name, filesize: file.size, totalChunks: chunks }),
       });
       if (!initRes.ok) throw new Error('Failed to init upload');
-      const { uploadId } = await initRes.json();
+      // init은 새 업로드 세션을 만들거나 기존 미완료 세션을 찾아준다.
+      // 기존 세션이면 서버가 이미 업로드된 청크 번호 목록을 함께 내려준다.
+      const {
+        uploadId,
+        uploadedChunks: alreadyUploadedChunks = [],
+      }: { uploadId: string; uploadedChunks?: number[] } = await initRes.json();
+
+      // 이미 업로드된 청크는 다시 보내지 않고, 아직 필요한 청크만 워커가 처리한다.
+      const uploadedChunkSet = new Set(alreadyUploadedChunks);
+      const pendingChunks = Array.from({ length: chunks }, (_, index) => index).filter(
+        (index) => !uploadedChunkSet.has(index)
+      );
+      setUploadedChunks(alreadyUploadedChunks.length);
 
       // 고정된 개수의 워커 풀을 실행한다. 각 워커는 nextChunk를 공유하면서
       // 다음 청크 번호를 하나씩 가져가므로, 모든 청크가 처리될 때까지
@@ -47,8 +59,8 @@ export default function App() {
       let nextChunk = 0;
 
       async function uploadWorker() {
-        while (nextChunk < chunks) {
-          const index = nextChunk++;
+        while (nextChunk < pendingChunks.length) {
+          const index = pendingChunks[nextChunk++];
           const start = index * CHUNK_SIZE;
           const end = Math.min(start + CHUNK_SIZE, file!.size);
           const blob = file!.slice(start, end);

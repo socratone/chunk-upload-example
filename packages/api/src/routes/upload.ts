@@ -16,6 +16,16 @@ const UPLOADS_DIR = path.resolve(__dirname, '../../uploads');
 fs.mkdirSync(TMP_DIR, { recursive: true });
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+function getUploadedChunkIndexes(uploadId: string) {
+  return db
+    .select()
+    .from(uploadChunks)
+    .where(eq(uploadChunks.uploadId, uploadId))
+    .all()
+    .filter((chunk) => chunk.uploaded && fs.existsSync(path.join(TMP_DIR, uploadId, String(chunk.chunkIndex))))
+    .map((chunk) => chunk.chunkIndex);
+}
+
 router.post('/init', async (req: Request, res: Response) => {
   const { filename, filesize, totalChunks } = req.body as {
     filename: string;
@@ -25,6 +35,37 @@ router.post('/init', async (req: Request, res: Response) => {
 
   if (!filename || !filesize || !totalChunks) {
     res.status(400).json({ error: 'Missing required fields' });
+    return;
+  }
+
+  const existingSessions = db
+    .select()
+    .from(uploadSessions)
+    .where(
+      and(
+        eq(uploadSessions.filename, filename),
+        eq(uploadSessions.filesize, filesize),
+        eq(uploadSessions.totalChunks, totalChunks)
+      )
+    )
+    .all();
+
+  for (const session of existingSessions) {
+    const sessionChunks = db
+      .select()
+      .from(uploadChunks)
+      .where(eq(uploadChunks.uploadId, session.id))
+      .all();
+
+    const isComplete = sessionChunks.length === totalChunks && sessionChunks.every((chunk) => chunk.uploaded);
+    if (isComplete && !fs.existsSync(path.join(TMP_DIR, session.id))) {
+      continue;
+    }
+
+    fs.mkdirSync(path.join(TMP_DIR, session.id), { recursive: true });
+    const uploadedChunks = getUploadedChunkIndexes(session.id);
+
+    res.json({ uploadId: session.id, uploadedChunks, resumed: uploadedChunks.length > 0 });
     return;
   }
 
@@ -41,7 +82,7 @@ router.post('/init', async (req: Request, res: Response) => {
 
   fs.mkdirSync(path.join(TMP_DIR, uploadId), { recursive: true });
 
-  res.json({ uploadId });
+  res.json({ uploadId, uploadedChunks: [], resumed: false });
 });
 
 router.post('/chunk', async (req: Request, res: Response) => {
