@@ -1,1 +1,6 @@
 node_modules/
+packages/web/dist/
+packages/api/data/
+packages/api/dist/
+packages/api/tmp/
+packages/api/uploads/
